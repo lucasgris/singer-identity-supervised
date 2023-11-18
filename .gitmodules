@@ -1,3 +1,6 @@
 [submodule "models/weights/RawNet3"]
 	path = models/weights/RawNet3
 	url = https://huggingface.co/jungjee/RawNet3
+[submodule "ssl-singer-identity"]
+	path = ssl-singer-identity
+	url = https://github.com/lucasgris/ssl-singer-identity.git
