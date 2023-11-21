@@ -15,6 +15,7 @@ from DatasetLoader import *
 import torch.distributed as dist
 import torch.multiprocessing as mp
 warnings.simplefilter("ignore")
+from utils import TensorboardWriter
 
 ## ===== ===== ===== ===== ===== ===== ===== =====
 ## Parse arguments
@@ -27,7 +28,7 @@ parser.add_argument('--config',         type=str,   default=None,   help='Config
 ## Data loader
 parser.add_argument('--max_frames',     type=int,   default=200,    help='Input length to the network for training')
 parser.add_argument('--eval_frames',    type=int,   default=300,    help='Input length to the network for testing 0 uses the whole files')
-parser.add_argument('--batch_size',     type=int,   default=200,    help='Batch size, number of speakers per batch')
+parser.add_argument('--batch_size',     type=int,   default=500,    help='Batch size, number of speakers per batch')
 parser.add_argument('--max_seg_per_spk', type=int,  default=500,    help='Maximum number of utterances per speaker per epoch')
 parser.add_argument('--nDataLoaderThread', type=int, default=5,     help='Number of loader threads')
 parser.add_argument('--augment',        type=bool,  default=False,  help='Augment input')
@@ -65,8 +66,8 @@ parser.add_argument('--save_path',      type=str,   default="exps/exp1", help='P
 ## Training and test data
 parser.add_argument('--train_list',     type=str,   default="data/train_list.txt",  help='Train list')
 parser.add_argument('--test_list',      type=str,   default="data/test_list.txt",   help='Evaluation list')
-parser.add_argument('--train_path',     type=str,   default="data/voxceleb2", help='Absolute path to the train set')
-parser.add_argument('--test_path',      type=str,   default="data/voxceleb1", help='Absolute path to the test set')
+parser.add_argument('--train_path',     type=str,   default="data/", help='Absolute path to the train set')
+parser.add_argument('--test_path',      type=str,   default="data/", help='Absolute path to the test set')
 parser.add_argument('--musan_path',     type=str,   default="data/musan_split", help='Absolute path to the test set')
 parser.add_argument('--rir_path',       type=str,   default="data/RIRS_NOISES/simulated_rirs", help='Absolute path to the test set')
 
@@ -112,11 +113,13 @@ if args.config is not None:
 
 def main_worker(gpu, ngpus_per_node, args):
 
+    tensorboard_writer = TensorboardWriter(args.save_path+"/tb")
+
     args.gpu = gpu
 
     ## Load models
     s = SpeakerNet(**vars(args))
-
+    print(s)
     if args.distributed:
         os.environ['MASTER_ADDR']='localhost'
         os.environ['MASTER_PORT']=args.port
@@ -214,10 +217,12 @@ def main_worker(gpu, ngpus_per_node, args):
         clr = [x['lr'] for x in trainer.__optimizer__.param_groups]
 
         loss, traineer = trainer.train_network(train_loader, verbose=(args.gpu == 0))
-
         if args.gpu == 0:
             print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "Epoch {:d}, TEER/TAcc {:2.2f}, TLOSS {:f}, LR {:f}".format(it, traineer, loss, max(clr)))
             scorefile.write("Epoch {:d}, TEER/TAcc {:2.2f}, TLOSS {:f}, LR {:f} \n".format(it, traineer, loss, max(clr)))
+            tensorboard_writer.train_log_epoch('loss', loss, it)
+            tensorboard_writer.train_log_epoch('TEER/TAcc', traineer, it)
+            tensorboard_writer.train_log_epoch('lr', max(clr), it)
 
         if it % args.test_interval == 0:
 
@@ -234,6 +239,8 @@ def main_worker(gpu, ngpus_per_node, args):
 
                 print('\n',time.strftime("%Y-%m-%d %H:%M:%S"), "Epoch {:d}, VEER {:2.4f}, MinDCF {:2.5f}".format(it, result[1], mindcf))
                 scorefile.write("Epoch {:d}, VEER {:2.4f}, MinDCF {:2.5f}\n".format(it, result[1], mindcf))
+                tensorboard_writer.valid_log_epoch('eer', result[1], it)
+                tensorboard_writer.valid_log_epoch('mindcf', mindcf, it)
 
                 trainer.saveParameters(args.model_save_path+"/model%09d.model"%it)
 

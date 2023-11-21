@@ -3,6 +3,25 @@
 
 import torch
 import torch.nn.functional as F
+import os
+from torch.utils.tensorboard import SummaryWriter
+
+class TensorboardWriter:
+    def __init__(self, log_dir):
+        self.train_writer = SummaryWriter(os.path.join(log_dir, "train"))
+        self.valid_writer = SummaryWriter(os.path.join(log_dir, "valid"))
+
+    def train_log_step(self, name, value, step):
+        self.train_writer.add_scalar(f"{name}/step", value, step)
+
+    def train_log_epoch(self, name, value, epoch):
+        self.train_writer.add_scalar(f"{name}/epoch", value, epoch)
+
+    def valid_log_step(self, name, value, step):
+        self.valid_writer.add_scalar(f"{name}/step", value, step)
+
+    def valid_log_epoch(self, name, value, epoch):
+        self.valid_writer.add_scalar(f"{name}/epoch", value, epoch)
 
 def accuracy(output, target, topk=(1,)):
     """Computes the precision@k for the specified values of k"""
